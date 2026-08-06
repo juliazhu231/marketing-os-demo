@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>雨傘王 Marketing OS｜Gmail 對接修正版</title>
+<title>雨傘王 Marketing OS｜對接顯示完成版</title>
 <style>
 :root{--bg:#f5f6f8;--panel:#fff;--ink:#1a2329;--muted:#6e7780;--line:#e4e8eb;--brand:#b31f2b;--green:#2d7a59;--amber:#9a6717;--red:#b83b3b;--blue:#386d9c;--shadow:0 10px 28px rgba(20,30,38,.07)}
 *{box-sizing:border-box}
@@ -1516,7 +1516,7 @@ async function renderProjects(){
  const cards=[];
  for(const p of list){
   const atts=await getAttachments(p.id);
-  cards.push(`<div class="pm-card">
+  cards.push(`<div class="pm-card ${window.collabContext&&window.collabContext.projectId===p.id?"collab-target":""}">
    <div class="pm-head">
     <div><div class="pm-title">${p.name}</div><div class="sub">${p.type}｜截止 ${p.date||"未定"}</div></div>
     <div class="pm-actions">

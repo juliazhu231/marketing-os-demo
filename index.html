@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>雨傘王 Marketing OS｜站內回覆同步版</title>
+<title>雨傘王 Marketing OS｜Google Sheet 共用版</title>
 <style>
 :root{--bg:#f5f6f8;--panel:#fff;--ink:#1a2329;--muted:#6e7780;--line:#e4e8eb;--brand:#b31f2b;--green:#2d7a59;--amber:#9a6717;--red:#b83b3b;--blue:#386d9c;--shadow:0 10px 28px rgba(20,30,38,.07)}
 *{box-sizing:border-box}
@@ -349,8 +349,7 @@ nav button{display:flex;justify-content:space-between;align-items:center;gap:8px
       <option value="">全部狀態</option>
       <option>待開始</option><option>進行中</option><option>等待他人</option><option>已完成</option>
      </select>
-     <button class="btn btn-soft" onclick="syncInviteResults(true)">↻ 同步對接結果</button>
-      <button class="btn" onclick="openProjectModal()">＋ 新增專案</button>
+     <button class="btn" onclick="openProjectModal()">＋ 新增專案</button>
     </div>
    </div>
    <div class="project-list" id="projectList"></div>
@@ -1242,64 +1241,12 @@ async function submitCollaboratorResponse(projectId,itemId){
     resultUrl:item.resultUrl||""
    })
   });
-  alert("回覆已送出，結果會同步到 Marketing OS。");
+  alert("回覆已送出，專案負責人會收到 Gmail 通知。");
  }catch(error){
   console.error(error);
   alert("送出失敗，請確認網路連線後再試一次。");
  }finally{
   if(btn){btn.disabled=false;btn.textContent="送出回覆";}
- }
-}
-
-
-async function syncInviteResults(showMessage=false){
- if(window.collabContext)return;
-
- try{
-  const result=await jsonpRequest({action:"listInvites"});
-  if(!result||!result.success||!Array.isArray(result.invites)){
-   throw new Error(result?.error||"無法取得對接結果");
-  }
-
-  let updatedCount=0;
-
-  result.invites.forEach(inv=>{
-   const project=pmProjects.find(p=>p.id===inv.projectId);
-   if(!project)return;
-
-   const item=(project.confirmations||[]).find(i=>i.id===inv.itemId);
-   if(!item)return;
-
-   const changed=
-    String(item.status||"")!==String(inv.status||"") ||
-    String(item.dueDate||"")!==String(inv.dueDate||"") ||
-    String(item.note||"")!==String(inv.note||"") ||
-    String(item.resultUrl||"")!==String(inv.resultUrl||"") ||
-    String(item.updatedAt||"")!==String(inv.updatedAt||"");
-
-   if(changed && inv.updatedAt){
-    item.status=inv.status||item.status;
-    item.dueDate=inv.dueDate||"";
-    item.note=inv.note||"";
-    item.resultUrl=inv.resultUrl||"";
-    item.updatedAt=inv.updatedAt||"";
-    item.unreadUpdate=true;
-    updatedCount++;
-   }
-  });
-
-  if(updatedCount){
-   savePmState();
-   updateProjectNavDot();
-   await renderProjects();
-  }
-
-  if(showMessage){
-   alert(updatedCount ? `已同步 ${updatedCount} 筆對接更新。` : "目前沒有新的對接結果。");
-  }
- }catch(error){
-  console.error(error);
-  if(showMessage)alert("同步失敗，請稍後再試。");
  }
 }
 
@@ -1884,23 +1831,14 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
  document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
  document.getElementById(b.dataset.page).classList.add("active");
  title.textContent=b.textContent;
- if(b.dataset.page==="projects"){renderProjects();syncInviteResults(false);}
+ if(b.dataset.page==="projects")renderProjects();
  if(b.dataset.page==="tasks")renderThreads();
  if(b.dataset.page==="store")renderStoreProjects();
  if(b.dataset.page==="collab")renderCollabProjects();
  if(b.dataset.page==="home")renderHomeTasks();
  renderModuleFiles(b.dataset.page);
 });
-openProjectDb().then(()=>{
- applyCollaboratorMode();
- renderProjects();
- renderStoreProjects();
- renderCollabProjects();
- setTimeout(()=>syncInviteResults(false),1500);
- if(!window.collabContext)setInterval(()=>syncInviteResults(false),60000);
-});
-openModuleDb().then(renderAllModuleFiles);
-renderLine();renderHomeTasks();renderTasks();renderThreads();
+openProjectDb().then(()=>{applyCollaboratorMode();renderProjects();renderStoreProjects();renderCollabProjects();});openModuleDb().then(renderAllModuleFiles);renderLine();renderHomeTasks();renderTasks();renderThreads();
 </script>
 
 <div class="pm-modal" id="projectModal">

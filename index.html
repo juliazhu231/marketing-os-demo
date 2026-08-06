@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>雨傘王 Marketing OS｜對接載入最終修正版</title>
+<title>雨傘王 Marketing OS｜Google Sheet 共用版</title>
 <style>
 :root{--bg:#f5f6f8;--panel:#fff;--ink:#1a2329;--muted:#6e7780;--line:#e4e8eb;--brand:#b31f2b;--green:#2d7a59;--amber:#9a6717;--red:#b83b3b;--blue:#386d9c;--shadow:0 10px 28px rgba(20,30,38,.07)}
 *{box-sizing:border-box}
@@ -1136,37 +1136,7 @@ function confirmationStatusClass(status){
  return "amber";
 }
 function encodeInvite(projectId,confirmation){
- const project=pmProjects.find(x=>x.id===projectId);
- const payload={
-  p:projectId,
-  a:confirmation.id,
-  t:confirmation.token,
-  project:{
-   id:project?.id||projectId,
-   name:project?.name||"受邀專案",
-   type:project?.type||"商品頁企劃",
-   status:project?.status||"等待他人",
-   priority:project?.priority||"中",
-   date:project?.date||"",
-   next:project?.next||"",
-   block:project?.block||""
-  },
-  item:{
-   id:confirmation.id,
-   title:confirmation.title,
-   email:confirmation.email,
-   status:confirmation.status,
-   permissions:confirmation.permissions||["status"],
-   dueDate:confirmation.dueDate||"",
-   note:confirmation.note||"",
-   resultUrl:confirmation.resultUrl||"",
-   token:confirmation.token,
-   createdAt:confirmation.createdAt||"",
-   updatedAt:confirmation.updatedAt||"",
-   unreadUpdate:false
-  }
- };
- return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+ return encodeURIComponent(confirmation.token);
 }
 function collaboratorUrl(projectId,confirmation){
  return `${location.href.split("#")[0]}#collab=${encodeInvite(projectId,confirmation)}`;
@@ -1188,7 +1158,7 @@ function renderProjectConfirmations(project){
     ${collaboratorFieldHtml(project,item,"note")}
     ${collaboratorFieldHtml(project,item,"resultUrl")}
     <div class="email-whitelist">此邀請僅授權給：<b>${item.email}</b>。你只能修改上方顯示的欄位。</div>
-    <button class="btn" style="margin-top:10px" onclick="submitCollaboratorResponse('${project.id}','${item.id}')">送出回覆</button>
+    <button class="btn" style="margin-top:10px" onclick="submitCollaboratorResponse(\'${project.id}\',\'${item.id}\')">送出回覆</button>
    </div>`:""}
    <div class="confirm-actions">
     ${!window.collabContext&&hasPermission(item,"status")?`<select class="confirm-status" onchange="updateConfirmationStatus('${project.id}','${item.id}',this.value)"><option ${item.status==="執行中"?"selected":""}>執行中</option><option ${item.status==="製作完成"?"selected":""}>製作完成</option><option ${item.status==="其他"?"selected":""}>其他</option></select>`:""}
@@ -1249,6 +1219,37 @@ function addProjectConfirmation(projectId){
  });
 }
 
+async function submitCollaboratorResponse(projectId,itemId){
+ const {project,item}=getConfirmation(projectId,itemId);
+ if(!project||!item)return;
+
+ const btn=event?.currentTarget;
+ if(btn){btn.disabled=true;btn.textContent="送出中…";}
+
+ try{
+  await fetch(MARKETING_OS_MAIL_API,{
+   method:"POST",
+   mode:"no-cors",
+   headers:{"Content-Type":"text/plain;charset=utf-8"},
+   body:JSON.stringify({
+    action:"response",
+    token:item.token,
+    email:item.email,
+    status:item.status||"",
+    dueDate:item.dueDate||"",
+    note:item.note||"",
+    resultUrl:item.resultUrl||""
+   })
+  });
+  alert("回覆已送出，專案負責人會收到 Gmail 通知。");
+ }catch(error){
+  console.error(error);
+  alert("送出失敗，請確認網路連線後再試一次。");
+ }finally{
+  if(btn){btn.disabled=false;btn.textContent="送出回覆";}
+ }
+}
+
 function updateConfirmationField(projectId,itemId,field,value){
  const project=pmProjects.find(x=>x.id===projectId);if(!project)return;
  const item=(project.confirmations||[]).find(x=>x.id===itemId);if(!item)return;
@@ -1300,20 +1301,6 @@ async function sendConfirmationInvite(projectId,itemId){
  if(!project||!item)return;
 
  const url=collaboratorUrl(projectId,item);
- const subject=`【雨傘王專案確認】${project.name}－${item.title}`;
- const content=`您好，
-
-請協助更新以下對接項目的處理狀態：
-
-專案：${project.name}
-對接內容：${item.title}
-可編輯欄位：${(item.permissions||["status"]).map(permissionLabel).join("、")}
-
-受限操作連結：
-${url}
-
-此連結僅能開啟被指派項目的畫面，不能修改專案其他內容。`;
-
  const buttons=[...document.querySelectorAll(`button[onclick="sendConfirmationInvite('${projectId}','${itemId}')"]`)];
  buttons.forEach(btn=>{btn.disabled=true;btn.textContent="寄送中…";});
 
@@ -1322,11 +1309,26 @@ ${url}
    method:"POST",
    mode:"no-cors",
    headers:{"Content-Type":"text/plain;charset=utf-8"},
-   body:JSON.stringify({action:"invite",email:item.email,subject,content})
+   body:JSON.stringify({
+    action:"invite",
+    token:item.token,
+    projectId:project.id,
+    projectName:project.name,
+    projectType:project.type||"商品頁企劃",
+    itemId:item.id,
+    itemTitle:item.title,
+    email:item.email,
+    permissions:item.permissions||["status"],
+    status:item.status||"執行中",
+    dueDate:item.dueDate||"",
+    note:item.note||"",
+    resultUrl:item.resultUrl||"",
+    inviteUrl:url
+   })
   });
   alert(`邀請信已送出至：${item.email}
 
-請對方稍後檢查收件匣與垃圾郵件。`);
+資料已同步到 Google Sheet。`);
  }catch(error){
   console.error(error);
   alert("寄信失敗，請確認網路連線與 Apps Script 部署狀態。");
@@ -1335,90 +1337,101 @@ ${url}
  }
 }
 
-async function submitCollaboratorResponse(projectId,itemId){
- const {project,item}=getConfirmation(projectId,itemId);
- if(!project||!item)return;
-
- const button=event?.currentTarget;
- if(button){button.disabled=true;button.textContent="送出中…";}
-
- try{
-  await fetch(MARKETING_OS_MAIL_API,{
-   method:"POST",
-   mode:"no-cors",
-   headers:{"Content-Type":"text/plain;charset=utf-8"},
-   body:JSON.stringify({
-    action:"response",
-    email:item.email,
-    projectName:project.name,
-    itemTitle:item.title,
-    status:item.status||"",
-    dueDate:item.dueDate||"",
-    note:item.note||"",
-    resultUrl:item.resultUrl||"",
-    updatedAt:new Date().toLocaleString("zh-TW")
-   })
-  });
-  alert("回覆已送出給專案負責人。");
- }catch(error){
-  console.error(error);
-  alert("送出失敗，請確認網路連線後再試一次。");
- }finally{
-  if(button){button.disabled=false;button.textContent="送出回覆";}
- }
+function jsonpRequest(params){
+ return new Promise((resolve,reject)=>{
+  const callback="mos_cb_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+  const script=document.createElement("script");
+  const timer=setTimeout(()=>{
+   cleanup();
+   reject(new Error("讀取逾時"));
+  },12000);
+  function cleanup(){
+   clearTimeout(timer);
+   delete window[callback];
+   script.remove();
+  }
+  window[callback]=data=>{cleanup();resolve(data);};
+  const qs=new URLSearchParams({...params,callback});
+  script.src=MARKETING_OS_MAIL_API+"?"+qs.toString();
+  script.onerror=()=>{cleanup();reject(new Error("無法讀取邀請資料"));};
+  document.head.appendChild(script);
+ });
 }
 
 function parseCollaboratorMode(){
- const m=(location.hash||"").match(/^#collab=(.+)$/);if(!m)return null;
- try{
-  const obj=JSON.parse(decodeURIComponent(escape(atob(m[1]))));
-  let project=pmProjects.find(x=>x.id===obj.p);
-  let item=(project?.confirmations||[]).find(x=>x.id===obj.a);
-
-  if((!project||!item)&&obj.project&&obj.item){
-   project={
-    ...obj.project,
-    confirmations:[obj.item],
-    subtasks:[],
-    links:[],
-    attachments:[]
-   };
-   pmProjects=[project,...pmProjects.filter(x=>x.id!==project.id)];
-   item=obj.item;
-  }
-
-  if(!project||!item||item.token!==obj.t)return null;
-  return {projectId:obj.p,assignmentId:obj.a,token:obj.t};
- }catch(e){
-  console.error("邀請連結解析失敗",e);
-  return null;
- }
+ const m=(location.hash||"").match(/^#collab=(.+)$/);
+ if(!m)return null;
+ return {token:decodeURIComponent(m[1])};
 }
-function applyCollaboratorMode(){
- window.collabContext=parseCollaboratorMode();
- if(!window.collabContext)return;
+
+async function applyCollaboratorMode(){
+ const parsed=parseCollaboratorMode();
+ if(!parsed)return;
 
  document.body.classList.add("collab-mode");
  const banner=document.getElementById("collabBanner");
- if(banner)banner.style.display="block";
-
- // 關鍵修正：collabContext 建立後，必須重新渲染專案，
- // 否則第一次渲染時尚未加上 collab-target，CSS 會把專案卡隱藏。
- renderProjects();
-
- const saved=sessionStorage.getItem("collabVerifiedEmail");
- const {item}=getConfirmation(window.collabContext.projectId,window.collabContext.assignmentId);
-
- if(!item){
-  const root=document.getElementById("projectList");
-  if(root)root.innerHTML='<div class="card"><b>邀請資料讀取失敗</b><div class="sub" style="margin-top:6px">請回到最新邀請信，重新點擊完整連結。</div></div>';
-  return;
+ if(banner){
+  banner.style.display="block";
+  banner.innerHTML="<b>正在載入邀請資料…</b><br>請稍候。";
  }
 
- if(saved!==item.email){
-  collabEmailGate.classList.add("open");
+ try{
+  const result=await jsonpRequest({action:"getInvite",token:parsed.token});
+  if(!result||!result.success||!result.invite)throw new Error(result?.error||"找不到邀請資料");
+
+  const inv=result.invite;
+  const item={
+   id:inv.itemId,
+   title:inv.itemTitle,
+   email:String(inv.email||"").toLowerCase(),
+   status:inv.status||"執行中",
+   permissions:Array.isArray(inv.permissions)?inv.permissions:["status"],
+   dueDate:inv.dueDate||"",
+   note:inv.note||"",
+   resultUrl:inv.resultUrl||"",
+   token:inv.token,
+   createdAt:inv.createdAt||"",
+   updatedAt:inv.updatedAt||"",
+   unreadUpdate:false
+  };
+  const project={
+   id:inv.projectId,
+   name:inv.projectName,
+   type:inv.projectType||"商品頁企劃",
+   status:"等待他人",
+   priority:"中",
+   date:"",
+   progress:0,
+   next:"",
+   block:"",
+   confirmations:[item],
+   subtasks:[],
+   cloudLinks:[]
+  };
+
+  pmProjects=[project,...pmProjects.filter(x=>x.id!==project.id)];
+  window.collabContext={projectId:project.id,assignmentId:item.id,token:item.token};
+
+  if(banner){
+   banner.innerHTML="<b>對接人受限模式</b><br>你只能更新被指派事項的指定欄位，不能查看或修改其他專案。";
+  }
+
+  await renderProjects();
+
+  const saved=sessionStorage.getItem("collabVerifiedEmail");
+  if(saved!==item.email){
+   collabEmailGate.classList.add("open");
+  }
+ }catch(error){
+  console.error(error);
+  if(banner){
+   banner.innerHTML="<b>邀請資料讀取失敗</b><br>"+String(error.message||error);
+  }
+  const root=document.getElementById("projectList");
+  if(root)root.innerHTML='<div class="card"><b>無法開啟此邀請</b><div class="sub" style="margin-top:6px">請確認你點的是最新邀請信中的完整連結。</div></div>';
  }
 }
+
 function verifyCollaboratorEmail(){
  const input=collabEmailInput.value.trim().toLowerCase();
  const {item}=getConfirmation(window.collabContext.projectId,window.collabContext.assignmentId);

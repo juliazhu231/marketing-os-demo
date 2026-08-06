@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>雨傘王 Marketing OS｜Google Sheet 共用版</title>
+<title>雨傘王 Marketing OS｜站內留言同步版</title>
 <style>
 :root{--bg:#f5f6f8;--panel:#fff;--ink:#1a2329;--muted:#6e7780;--line:#e4e8eb;--brand:#b31f2b;--green:#2d7a59;--amber:#9a6717;--red:#b83b3b;--blue:#386d9c;--shadow:0 10px 28px rgba(20,30,38,.07)}
 *{box-sizing:border-box}
@@ -117,6 +117,12 @@ nav button{display:flex;justify-content:space-between;align-items:center;gap:8px
 .collab-response textarea{min-height:90px}
 .collab-view-card{border:1px solid #eadac3;border-radius:14px;padding:14px;background:#fff8f0}
 .email-whitelist{font-size:12px;color:#315e80;background:#eef5fb;border-radius:10px;padding:9px;margin-top:8px}
+.collab-message-box{margin-top:4px}
+.collab-message-box textarea{min-height:74px;resize:vertical}
+.message-count{text-align:right;font-size:11px;color:var(--muted);margin-top:4px}
+.latest-message{margin-top:10px;background:#fff7e8;border:1px solid #ecd09a;border-radius:10px;padding:10px;font-size:13px;line-height:1.6}
+.latest-message b{color:#8a5510}
+.latest-message-time{display:block;color:var(--muted);font-size:11px;margin-top:4px}
 
 .confirm-box{border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff8f0;margin-top:12px}
 .confirm-title{font-size:14px;font-weight:900;color:#8a5510;margin-bottom:8px}
@@ -349,7 +355,8 @@ nav button{display:flex;justify-content:space-between;align-items:center;gap:8px
       <option value="">全部狀態</option>
       <option>待開始</option><option>進行中</option><option>等待他人</option><option>已完成</option>
      </select>
-     <button class="btn" onclick="openProjectModal()">＋ 新增專案</button>
+     <button class="btn btn-soft" onclick="syncInviteResults(true)">↻ 同步對接結果</button>
+      <button class="btn" onclick="openProjectModal()">＋ 新增專案</button>
     </div>
    </div>
    <div class="project-list" id="projectList"></div>
@@ -992,7 +999,7 @@ pmProjects=pmProjects.map(p=>({
  ...p,
  subtasks:(p.subtasks||[]).map((s,i)=>typeof s==="string"?{text:s,completed:i<Math.round((p.subtasks.length||1)*(p.progress||0)/100),dueDate:""}:{...s,dueDate:s.dueDate||""})
 }));
-pmProjects.forEach(p=>{p.confirmations=(p.confirmations||[]).map(i=>({...i,permissions:Array.isArray(i.permissions)?i.permissions:["status"],dueDate:i.dueDate||"",note:i.note||"",resultUrl:i.resultUrl||"",unreadUpdate:!!i.unreadUpdate}));});
+pmProjects.forEach(p=>{p.confirmations=(p.confirmations||[]).map(i=>({...i,permissions:Array.isArray(i.permissions)?i.permissions:["status"],dueDate:i.dueDate||"",note:i.note||"",resultUrl:i.resultUrl||"",message:i.message||"",unreadUpdate:!!i.unreadUpdate}));});
 pmProjects=pmProjects.map(p=>{
  const legacy=[];
  if(p.sheetUrl)legacy.push({id:"cl_sheet_"+p.id,type:"Google Sheet",name:"Google Sheet",url:p.sheetUrl});
@@ -1130,6 +1137,23 @@ function collaboratorFieldHtml(project,item,key){
  return "";
 }
 
+function escapeHtml(value){
+ return String(value||"")
+  .replaceAll("&","&amp;")
+  .replaceAll("<","&lt;")
+  .replaceAll(">","&gt;")
+  .replaceAll('"',"&quot;")
+  .replaceAll("'","&#039;");
+}
+function updateCollaboratorMessage(projectId,itemId,value,textarea){
+ const {item}=getConfirmation(projectId,itemId);
+ if(!item)return;
+ item.message=String(value||"").slice(0,50);
+ if(textarea && textarea.value!==item.message)textarea.value=item.message;
+ const counter=textarea?.closest(".collab-message-box")?.querySelector(".message-count span");
+ if(counter)counter.textContent=String(item.message.length);
+}
+
 function confirmationStatusClass(status){
  if(status==="製作完成")return "green";
  if(status==="執行中")return "blue";
@@ -1157,9 +1181,16 @@ function renderProjectConfirmations(project){
     ${collaboratorFieldHtml(project,item,"dueDate")}
     ${collaboratorFieldHtml(project,item,"note")}
     ${collaboratorFieldHtml(project,item,"resultUrl")}
+    <div class="collab-message-box">
+     <label>留言給負責人（50 字以內）
+      <textarea maxlength="50" placeholder="例如：已完成初稿，請協助確認版面。" oninput="updateCollaboratorMessage('${project.id}','${item.id}',this.value,this)">${item.message||""}</textarea>
+     </label>
+     <div class="message-count"><span>${(item.message||"").length}</span>/50</div>
+    </div>
     <div class="email-whitelist">此邀請僅授權給：<b>${item.email}</b>。你只能修改上方顯示的欄位。</div>
     <button class="btn" style="margin-top:10px" onclick="submitCollaboratorResponse(\'${project.id}\',\'${item.id}\')">送出回覆</button>
    </div>`:""}
+   ${!window.collabContext&&item.message?`<div class="latest-message"><b>最新留言</b><br>${escapeHtml(item.message)}${item.updatedAt?`<span class="latest-message-time">更新於 ${item.updatedAt}</span>`:""}</div>`:""}
    <div class="confirm-actions">
     ${!window.collabContext&&hasPermission(item,"status")?`<select class="confirm-status" onchange="updateConfirmationStatus('${project.id}','${item.id}',this.value)"><option ${item.status==="執行中"?"selected":""}>執行中</option><option ${item.status==="製作完成"?"selected":""}>製作完成</option><option ${item.status==="其他"?"selected":""}>其他</option></select>`:""}
     <button class="icon-btn cloud-open owner-only" onclick="sendConfirmationInvite('${project.id}','${item.id}')">寄送邀請</button>
@@ -1206,7 +1237,7 @@ function addProjectConfirmation(projectId){
  if(!permissions.length){showConfirmationError(projectId,"請至少開放一個可編輯欄位。");return}
  const item={
   id:"cf_"+Date.now()+"_"+Math.random().toString(36).slice(2),
-  title,email,status,permissions,dueDate:"",note:"",resultUrl:"",
+  title,email,status,permissions,dueDate:"",note:"",resultUrl:"",message:"",
   token:(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2)),
   createdAt:new Date().toLocaleDateString("zh-TW"),updatedAt:"",unreadUpdate:false
  };
@@ -1238,15 +1269,70 @@ async function submitCollaboratorResponse(projectId,itemId){
     status:item.status||"",
     dueDate:item.dueDate||"",
     note:item.note||"",
-    resultUrl:item.resultUrl||""
+    resultUrl:item.resultUrl||"",
+    message:String(item.message||"").slice(0,50)
    })
   });
-  alert("回覆已送出，專案負責人會收到 Gmail 通知。");
+  alert("回覆已送出，結果會同步到 Marketing OS。");
  }catch(error){
   console.error(error);
   alert("送出失敗，請確認網路連線後再試一次。");
  }finally{
   if(btn){btn.disabled=false;btn.textContent="送出回覆";}
+ }
+}
+
+
+async function syncInviteResults(showMessage=false){
+ if(window.collabContext)return;
+
+ try{
+  const result=await jsonpRequest({action:"listInvites"});
+  if(!result||!result.success||!Array.isArray(result.invites)){
+   throw new Error(result?.error||"無法取得對接結果");
+  }
+
+  let updatedCount=0;
+
+  result.invites.forEach(inv=>{
+   const project=pmProjects.find(p=>p.id===inv.projectId);
+   if(!project)return;
+
+   const item=(project.confirmations||[]).find(i=>i.id===inv.itemId);
+   if(!item)return;
+
+   const changed=
+    String(item.status||"")!==String(inv.status||"") ||
+    String(item.dueDate||"")!==String(inv.dueDate||"") ||
+    String(item.note||"")!==String(inv.note||"") ||
+    String(item.resultUrl||"")!==String(inv.resultUrl||"") ||
+    String(item.message||"")!==String(inv.message||"") ||
+    String(item.updatedAt||"")!==String(inv.updatedAt||"");
+
+   if(changed && inv.updatedAt){
+    item.status=inv.status||item.status;
+    item.dueDate=inv.dueDate||"";
+    item.note=inv.note||"";
+    item.resultUrl=inv.resultUrl||"";
+    item.message=inv.message||"";
+    item.updatedAt=inv.updatedAt||"";
+    item.unreadUpdate=true;
+    updatedCount++;
+   }
+  });
+
+  if(updatedCount){
+   savePmState();
+   updateProjectNavDot();
+   await renderProjects();
+  }
+
+  if(showMessage){
+   alert(updatedCount ? `已同步 ${updatedCount} 筆對接更新。` : "目前沒有新的對接結果。");
+  }
+ }catch(error){
+  console.error(error);
+  if(showMessage)alert("同步失敗，請稍後再試。");
  }
 }
 
@@ -1323,6 +1409,7 @@ async function sendConfirmationInvite(projectId,itemId){
     dueDate:item.dueDate||"",
     note:item.note||"",
     resultUrl:item.resultUrl||"",
+    message:item.message||"",
     inviteUrl:url
    })
   });
@@ -1389,6 +1476,7 @@ async function applyCollaboratorMode(){
    dueDate:inv.dueDate||"",
    note:inv.note||"",
    resultUrl:inv.resultUrl||"",
+   message:inv.message||"",
    token:inv.token,
    createdAt:inv.createdAt||"",
    updatedAt:inv.updatedAt||"",
@@ -1831,14 +1919,23 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
  document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
  document.getElementById(b.dataset.page).classList.add("active");
  title.textContent=b.textContent;
- if(b.dataset.page==="projects")renderProjects();
+ if(b.dataset.page==="projects"){renderProjects();syncInviteResults(false);}
  if(b.dataset.page==="tasks")renderThreads();
  if(b.dataset.page==="store")renderStoreProjects();
  if(b.dataset.page==="collab")renderCollabProjects();
  if(b.dataset.page==="home")renderHomeTasks();
  renderModuleFiles(b.dataset.page);
 });
-openProjectDb().then(()=>{applyCollaboratorMode();renderProjects();renderStoreProjects();renderCollabProjects();});openModuleDb().then(renderAllModuleFiles);renderLine();renderHomeTasks();renderTasks();renderThreads();
+openProjectDb().then(()=>{
+ applyCollaboratorMode();
+ renderProjects();
+ renderStoreProjects();
+ renderCollabProjects();
+ setTimeout(()=>syncInviteResults(false),1500);
+ if(!window.collabContext)setInterval(()=>syncInviteResults(false),60000);
+});
+openModuleDb().then(renderAllModuleFiles);
+renderLine();renderHomeTasks();renderTasks();renderThreads();
 </script>
 
 <div class="pm-modal" id="projectModal">
